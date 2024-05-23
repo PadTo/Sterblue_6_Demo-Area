@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Spacept DemoPage</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.11.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.11.0/mapbox-gl.js"></script>
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; }
+        #map { width: 100%; flex-grow: 1; height: 100%; }
+        #container { display: flex; height: 100%; }
+        #sidebar { width: 200px; flex-shrink: 0; height: 100%; padding: 30px; }
+        button { display: block; margin-bottom: 15px; align-self: center; }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="sidebar">
+            <button id="fly-to-data-1">DataDemo 1</button>
+            <button id="fly-to-data-2">DataDemo 2</button>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <script>
+        // Constants
+        const DATASET_CENTER_1 = [0.8844756, 48.6981497];
+        const DATASET_CENTER_2 = [2.13198, 47.783261];
+        const INITIAL_ZOOM = 18;
+        const hoverableLayers = ['Sample-Deliverable-Polygons', 'Vegetation-Deliverable-Poly-Fixed'];
+        const popup = new mapboxgl.Popup({
+            closeButton: false,
+            closeOnClick: false
+        });
+
+        // Initialize the Mapbox map
+        mapboxgl.accessToken = 'pk.eyJ1IjoiMjAwMTYyOTIiLCJhIjoiY2x0bDk3YjN4MWM5cDJxczRuaWo3cDk3eiJ9.E8Y6gfYDlYP0EOmAzmt7DQ';
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/satellite-v9',
+            zoom: INITIAL_ZOOM,
+            center: DATASET_CENTER_1,
+            projection: 'globe' 
+        });
+
+        // Configuration for sources
+        const sourceConfigs = [
+            { id: 'Sample-Deliverable-Fixed-Line', type: 'geojson', data: 'Data/Sample_Deliverable_fixed.geojson', promoteId: '' },
+            { id: 'Sample-Deliverable-Polygons', type: 'geojson', data: 'Data/Sample_Deliverable.geojson', promoteId: 'id_number' },
+            { id: 'Vegetation-Deliverable-Input-Line', type: 'geojson', data: 'New_Data_Converted_and_Projected/Vegetation Management Sample Input.geojson', promoteId: '' },
+            { id: 'Vegetation-Deliverable-Poly-Fixed', type: 'geojson', data: 'New_Data_Converted_and_Projected/Sample_Deliverable_fixed.geojson', promoteId: 'id_number' }
+        ];
+
+        // Configuration for layers
+        const layerConfigs = [
+            { id: 'Sample-Deliverable-Fixed-Line', type: 'line', source: 'Sample-Deliverable-Fixed-Line', paint: { 'line-color': 'red', 'line-width': 2 } },
+            { id: 'Sample-Deliverable-Polygons', source: 'Sample-Deliverable-Polygons', type: 'fill', paint: { 'fill-color': '#0080ff', 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 1, 0.5] } },
+            { id: 'Sample-Deliverable-Polygons-Outline', source: 'Sample-Deliverable-Polygons', type: 'line', paint: { 'line-color': '#000000', 'line-width': 1 } },
+            { id: 'Vegetation-Deliverable-Poly-Fixed', source: 'Vegetation-Deliverable-Poly-Fixed', type: 'fill', paint: { 'fill-color': '#0080ff', 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 1, 0.5] } },
+            { id: 'Vegetation-Deliverable-Poly-Fixed-Outline', source: 'Vegetation-Deliverable-Poly-Fixed', type: 'line', paint: { 'line-color': '#000000', 'line-width': 1 } },
+            { id: 'Vegetation-Deliverable-Input-Line', source: 'Vegetation-Deliverable-Input-Line', type: 'line', paint: { 'line-color': 'red', 'line-width': 2, 'line-opacity': 0.75 } }
+        ];
+
+        // Add sources to the map
+        function addSourceToLayer(map, sourceConfigs) {
+            sourceConfigs.forEach(config => {
+                map.addSource(config.id, {
+                    type: config.type,
+                    data: config.data,
+                    promoteId: config.promoteId
+                });
+            });
+        }
+
+        // Add layers to the map
+        function addLayerToMap(map, layerConfigs) {
+            layerConfigs.forEach(config => {
+                map.addLayer(config);
+            });
+        }
+
+        // Initialize hover functionality for a specified layer
+        function initializeHover(map, layerId) {
+            let hoveredStateId = null;
+
+            map.on('mousemove', layerId, (e) => {
+                if (e.features.length > 0) {
+                    if (hoveredStateId !== null) {
+                        map.setFeatureState({ source: layerId, id: hoveredStateId }, { hover: false });
+                    }
+                    hoveredStateId = e.features[0].id;
+                    map.setFeatureState({ source: layerId, id: hoveredStateId }, { hover: true });
+
+                    // Display popup with feature properties
+                    const coordinates = e.features[0].geometry.coordinates[0];
+                    const risk = e.features[0].properties.risk;
+                    const distance = e.features[0].properties.distance;
+                    const firstPointCoordinates = coordinates.length > 0 ? coordinates[0] : null;
+
+                    if (firstPointCoordinates) {
+                        const formattedMessage = `
+                            <div style="font-weight: bold; font-size: 14px;">Risk Level: <strong>${risk}</strong></div>
+                            <div style="font-size: 12px;">Distance: <em>${distance} meters</em></div>
+                        `;
+                        popup.setLngLat(firstPointCoordinates).setHTML(formattedMessage).addTo(map);
+                    }
+                }
+            });
+
+            // Reset hover state on mouse leave
+            map.on('mouseleave', layerId, () => {
+                if (hoveredStateId !== null) {
+                    map.setFeatureState({ source: layerId, id: hoveredStateId }, { hover: false });
+                }
+                hoveredStateId = null;
+                map.getCanvas().style.cursor = '';
+                popup.remove();
+            });
+
+            // Change cursor to pointer on hover
+            map.on('mousemove', layerId, () => {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+        }
+
+        // Fly to a specified dataset center
+        function flyToDataset(center) {
+            map.flyTo({
+                center: center,
+                zoom: INITIAL_ZOOM
+            });
+        }
+
+        // Map load event
+        map.on('load', () => {
+            map.setFog({});
+            addSourceToLayer(map, sourceConfigs);
+            addLayerToMap(map, layerConfigs);
+            hoverableLayers.forEach(layer => initializeHover(map, layer));
+        });
+
+        // Button click events
+        document.querySelector('#fly-to-data-1').addEventListener('click', () => flyToDataset(DATASET_CENTER_1));
+        document.querySelector('#fly-to-data-2').addEventListener('click', () => flyToDataset(DATASET_CENTER_2));
+    </script>
+</body>
+</html>
